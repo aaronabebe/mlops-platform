@@ -2,17 +2,17 @@
 
 ## prerequisites 
 
-- k3d 
+- kind 
 - kubectl
 - helm
 
 
 ## setup notes
 
-start the k3d cluster
+start the kind cluster
 
 ```sh
-k3d cluster create mlops --k3s-node-label "app=clearml@server:0"
+k3d cluster create --config clearml-kind.yml
 ```
 
 install clearml via helm
@@ -34,13 +34,18 @@ important cluster getters
 ```sh
 kubetl get events
 kubetl get pods
+kubectl get pvc
 ```
 
 
 ## todos
 
 - [x] setup k3d + helm
-- [ ] setup clearml server
-  - [ ] fix memory issues with clearml elastic cluster -> deploy on remote server?
+- [x ] setup clearml server
+  - [x] fix memory issues with clearml elastic cluster -> deploy on remote server?
 - [ ] plan pipeline + steps
 - [ ]
+
+## timetracking
+
+- 14.11.21 | 6h | setup clearml-agent, setup k3d, helm, kubectl locally
