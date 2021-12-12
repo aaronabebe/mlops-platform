@@ -11,9 +11,10 @@ Quick Links:
 - [x] setup clearml server
   - [x] fix memory issues with clearml elastic cluster -> deploy on remote server?
 - [x] read docs plan project list
-- [ ] check out clearml repo
-- [ ] setup mnist pytorch
+- [x] check out clearml repo
+- [x] setup mnist pytorch
 - [ ] find other ml example projects
+- [ ] fix serving error ('config.pbtxt' could not be inferred)
 
 ## setup with docker compose
 

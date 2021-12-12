@@ -1,8 +1,12 @@
+import os
+from tempfile import gettempdir
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from clearml import Dataset
+from clearml import Dataset, Task, Logger
+from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
 
 
@@ -45,19 +49,19 @@ def get_data_loaders(batch_size):
         root=dataset_path, train=True, download=False, transform=transform
     )
     train_loader = torch.utils.data.DataLoader(
-        trainset, batch_size=batch_size, shuffle=True, num_workers=10
+        trainset, batch_size=batch_size, shuffle=True, num_workers=8
     )
 
     testset = datasets.MNIST(
         root=dataset_path, train=False, download=False, transform=transform
     )
     test_loader = torch.utils.data.DataLoader(
-        testset, batch_size=batch_size, shuffle=True, num_workers=10
+        testset, batch_size=batch_size, shuffle=True, num_workers=8
     )
     return train_loader, test_loader
 
 
-def train(model, device, train_loader, optimizer, epoch, log):
+def train(model, device, train_loader, optimizer, epoch, log, writer):
     model.train()
     for batch_idx, (X, y) in enumerate(train_loader):
         X, y = X.to(device), y.to(device)
@@ -67,53 +71,66 @@ def train(model, device, train_loader, optimizer, epoch, log):
         loss.backward()
         optimizer.step()
         if batch_idx % log == 0:
-            # Logger.current_logger().report_scalar(
-            #     "train", "loss", iteration=(epoch * len(train_loader) + batch_idx), value=loss.item()
-            # )
+            n_iter = epoch * len(train_loader) + batch_idx
+            Logger.current_logger().report_scalar(
+                "train", "loss", iteration=n_iter, value=loss.item()
+            )
+            writer.add_scalar('Train/Loss', loss.data.item(), n_iter)
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(epoch, batch_idx * len(X),
                                                                            len(train_loader.dataset),
                                                                            100. * batch_idx / len(train_loader),
                                                                            loss.item()))
 
 
-def test(model, device, test_loader, epoch):
+def test(model, device, test_loader, epoch, writer):
     model.eval()
     test_loss = 0
     correct = 0
     with torch.no_grad():
-        for X, y in test_loader:
+        for batch_idx, (X, y) in enumerate(test_loader):
             X, y = X.to(device), y.to(device)
             output = model(X)
             test_loss += F.nll_loss(output, y, reduction='sum').item()
             pred = output.argmax(dim=1, keepdim=True)
-            correct += pred.eq(y.view_as(pred)).sum().item()
+            pred = pred.eq(y.view_as(pred)).sum().item()
+            correct += pred
+            writer.add_scalar('Test/Loss', pred, batch_idx)
+            if batch_idx % 10 == 0:
+                writer.add_image('test', X[0, :, :, :], batch_idx)
 
     test_loss /= len(test_loader.dataset)
-    # Logger.current_logger().report_scalar(
-    #     "test", "loss", iteration=epoch, value=test_loss)
-    # Logger.current_logger().report_scalar(
-    #     "test", "accuracy", iteration=epoch, value=(correct / len(test_loader.dataset)))
+    Logger.current_logger().report_scalar(
+        "test", "loss", iteration=epoch, value=test_loss)
+    Logger.current_logger().report_scalar(
+        "test", "accuracy", iteration=epoch, value=(correct / len(test_loader.dataset)))
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
 
 
 def setup_clearml():
-    # init task
+    task = Task.init(project_name="pytorch_mnist", task_name="image classification MNIST")
     params = {
-        "epochs": 10,
+        "epochs": 1,
         "batch_size": 64,
         "base_lr": 0.01,
         "momentum": 0.5,
-        "log_interval": 10,
+        "log_interval": 100,
     }
-    print(params)
-    return None, params
+    params = task.connect(params)  # enabling configuration override by clearml/
+    return task, params
+
+
+def get_tensorboard_writer():
+    writer = SummaryWriter('runs')
+    writer.add_text('TEXT', 'This is some initial test text that I\'ll see in the UI.', 0)
+    return writer
 
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     _, params = setup_clearml()
+    writer = get_tensorboard_writer()
 
     train_loader, test_loader = get_data_loaders(params.get('batch_size'))
     print(f'Loaded {len(train_loader)} train samples and {len(test_loader)} test samples.')
@@ -124,8 +141,10 @@ def main():
                           momentum=params.get('momentum'))
 
     for epoch in range(1, params.get('epochs') + 1):
-        train(model, device, train_loader, optimizer, epoch, params.get('log_interval'))
-        test(model, device, test_loader, epoch)
+        train(model, device, train_loader, optimizer, epoch, params.get('log_interval'), writer)
+        test(model, device, test_loader, epoch, writer)
+
+    torch.save(model.state_dict(), os.path.join(gettempdir(), "mnist_cnn.pt"))
 
 
 if __name__ == '__main__':
