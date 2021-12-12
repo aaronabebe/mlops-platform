@@ -5,4 +5,5 @@
 - 06.12.21 | 3h | checkout clearml repo
 - 08.12.21 | 1h | finalize subproject choices
 - 11.12.21 | 5h | setup first dataset, setup mnist with pytorch v1
+- 12.12.21 | 4h | setup first clearml training, tensorboard for first example, try out serving
 
